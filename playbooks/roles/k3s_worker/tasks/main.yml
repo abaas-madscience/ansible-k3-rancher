@@ -1,0 +1,34 @@
+---
+- name: Load K3s join token
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Read token from file
+      slurp:
+        src: "cache/k3s_node_token.txt"
+      register: token_raw
+
+    - name: Set fact with token
+      set_fact:
+        k3s_node_token: "{{ token_raw.content | b64decode | trim }}"
+
+- name: Install K3s on workers
+  hosts: workers
+  become: false
+  vars:
+    k3s_node_token: "{{ hostvars['localhost']['k3s_node_token'] }}"
+  tasks:
+    - name: Install K3s agent on worker node
+      shell: |
+        curl -sfL https://get.k3s.io | \
+          K3S_URL="https://control.lab.local:6443" \
+          K3S_TOKEN="{{ k3s_node_token }}" \
+          INSTALL_K3S_EXEC="agent --node-name {{ inventory_hostname }}" sh -
+      args:
+        executable: /bin/bash
+      register: k3s_worker_install
+
+    - name: Wait for worker node to be registered
+      shell: |
+        sleep 5 && echo "Worker {{ inventory_hostname }} joined."
+      changed_when: false
