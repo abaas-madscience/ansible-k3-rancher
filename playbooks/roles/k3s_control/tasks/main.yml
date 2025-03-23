@@ -1,0 +1,52 @@
+---
+- name: Ensure cache directory exists
+  delegate_to: localhost
+  become: false
+  file:
+    path: cache
+    state: directory
+    mode: '0755'
+
+- name: Install K3s on control node
+  become: false
+  shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --tls-san control.lab.local --node-name control --write-kubeconfig-mode 644" sh -
+  args:
+    executable: /bin/bash
+
+- name: Ensure ~/.kube directory exists
+  file:
+    path: ~/.kube
+    state: directory
+    mode: '0700'
+
+- name: Symlink kubeconfig to ~/.kube/config
+  file:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: ~/.kube/config
+    state: link
+    force: true
+
+- name: Wait for K3s to be ready
+  shell: |
+    kubectl get nodes
+  register: k3s_ready
+  until: k3s_ready.rc == 0
+  retries: 10
+  delay: 3
+
+- name: Get actual K3s node token
+  become: true
+  command: cat /var/lib/rancher/k3s/server/node-token
+  register: k3s_token_cmd
+
+- name: Set fact for join token
+  set_fact:
+    k3s_node_token: "{{ k3s_token_cmd.stdout | trim }}"
+
+- name: Write join token to file for later use
+  delegate_to: localhost
+  become: false
+  copy:
+    content: "{{ k3s_node_token }}"
+    dest: "cache/k3s_node_token.txt"

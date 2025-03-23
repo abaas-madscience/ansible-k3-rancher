@@ -1,0 +1,40 @@
+---
+- name: Clean SSH known_hosts and configure SSH
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nodes:
+      - { name: "control", static_ip: "192.168.178.100" }
+      - { name: "worker-01", static_ip: "192.168.178.101" }
+      - { name: "worker-02", static_ip: "192.168.178.102" }
+      - { name: "worker-03", static_ip: "192.168.178.103" }
+      - { name: "worker-04", static_ip: "192.168.178.104" }
+  tasks:
+    - name: Remove nodes from known_hosts
+      lineinfile:
+        path: "{{ lookup('env', 'HOME') }}/.ssh/known_hosts"
+        regexp: "^{{ lab_node.name }}"
+        state: absent
+      loop: "{{ nodes }}"
+      loop_control:
+        loop_var: lab_node
+
+    - name: Ensure SSH configuration directory exists
+      file:
+        path: "{{ lookup('env', 'HOME') }}/.ssh"
+        state: directory
+        mode: '0700'
+
+    - name: Configure SSH to auto-accept host keys
+      blockinfile:
+        path: "{{ lookup('env', 'HOME') }}/.ssh/config"
+        create: true
+        mode: '0600'
+        marker: "# {mark} ANSIBLE MANAGED BLOCK FOR LAB NODES"
+        block: |
+          {% for lab_node in nodes %}
+          Host {{ lab_node.name }}
+            HostName {{ lab_node.static_ip }}
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          {% endfor %}

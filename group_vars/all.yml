@@ -1,0 +1,6 @@
+nodes:
+  - { name: "control", static_ip: "192.168.178.100" }
+  - { name: "worker-01", static_ip: "192.168.178.101" }
+  - { name: "worker-02", static_ip: "192.168.178.102" }
+  - { name: "worker-03", static_ip: "192.168.178.103" }
+  - { name: "worker-04", static_ip: "192.168.178.104" }

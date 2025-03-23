@@ -1,0 +1,6 @@
+---
+- name: Install K3s control plane
+  hosts: control
+  become: false
+  roles:
+    - k3s_control
