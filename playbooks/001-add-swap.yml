@@ -1,0 +1,18 @@
+---
+- name: Add swap space to all nodes
+  hosts: all
+  become: true
+  tasks:
+    - name: Ensure 2GB swap is available
+      shell: |
+        if [ ! -f /swapfile ]; then
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        fi
+        swapon /swapfile
+      args:
+        executable: /bin/bash
+      register: swapfile_created
+      changed_when: "'already' not in swapfile_created.stdout"

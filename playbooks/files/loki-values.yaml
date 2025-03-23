@@ -1,0 +1,27 @@
+mode: "single-binary"
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: boltdb-shipper
+        object_store: filesystem
+        schema: v11
+        index:
+          prefix: index_
+          period: 24h
+  storage_config:
+    boltdb_shipper:
+      active_index_directory: /tmp/loki/index
+      cache_location: /tmp/loki/index_cache
+      shared_store: filesystem
+    filesystem:
+      directory: /tmp/loki/chunks
+
+persistence:
+  enabled: false

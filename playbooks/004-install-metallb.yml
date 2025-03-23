@@ -1,0 +1,74 @@
+---
+- name: Install MetalLB via Helm
+  hosts: control
+  become: false
+  vars:
+    metallb_ip: 192.168.178.201
+  tasks:
+
+    - name: Check if Helm is installed
+      shell: which helm
+      register: helm_installed
+      ignore_errors: true
+
+    - name: Install Helm binary
+      become: true
+      shell: |
+        curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        executable: /bin/bash
+      when: helm_installed.rc != 0
+      register: helm_install
+      changed_when: true
+
+    - name: Create metallb namespace
+      command: kubectl create namespace metallb-system
+      register: ns_create
+      failed_when: false
+      changed_when: "'created' in ns_create.stdout"
+
+    - name: Add Helm repo for MetalLB
+      command: helm repo add metallb https://metallb.github.io/metallb
+      changed_when: true
+
+    - name: Update Helm repos
+      command: helm repo update
+      changed_when: true
+
+    - name: Install or upgrade MetalLB
+      command: >
+        helm upgrade --install metallb metallb/metallb
+        --namespace metallb-system
+      args:
+        creates: /etc/rancher/k3s/metallb-installed-marker
+
+    - name: Create IP address pool + L2Advertisement for Rancher
+      copy:
+        dest: /tmp/metallb-rancher-pool.yaml
+        content: |
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: rancher-pool
+            namespace: metallb-system
+          spec:
+            addresses:
+              - {{ metallb_ip }}/32
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: rancher-announce
+            namespace: metallb-system
+
+
+    - name: Wait for MetalLB webhook to be ready
+      shell: |
+        kubectl wait --namespace metallb-system \
+          --for=condition=Ready pod \
+          --selector=app.kubernetes.io/component=controller \
+          --timeout=60s
+      register: wait_result
+
+    - name: Apply MetalLB config
+      command: kubectl apply -f /tmp/metallb-rancher-pool.yaml

@@ -1,0 +1,75 @@
+---
+- name: Install Grafana with VictoriaMetrics as datasource
+  hosts: control
+  become: false
+  tasks:
+
+    - name: Create monitoring namespace
+      command: kubectl create namespace monitoring
+      register: ns_create
+      failed_when: false
+      changed_when: "'created' in ns_create.stdout"
+
+    - name: Add Grafana Helm repo
+      command: helm repo add grafana https://grafana.github.io/helm-charts
+      changed_when: true
+
+    - name: Update Helm repos
+      command: helm repo update
+      changed_when: true
+
+    - name: Create MetalLB pool for Grafana
+      copy:
+        dest: /tmp/metallb-grafana-pool.yaml
+        content: |
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: grafana-pool
+            namespace: metallb-system
+          spec:
+            addresses:
+              - 192.168.178.203/32
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: grafana-advertise
+            namespace: metallb-system
+
+    - name: Apply Grafana IP pool to MetalLB
+      command: kubectl apply -f /tmp/metallb-grafana-pool.yaml
+
+    - name: Deploy Grafana with VictoriaMetrics datasource
+      copy:
+        dest: /tmp/grafana-values.yaml
+        content: |
+          adminUser: admin
+          adminPassword: admin
+          service:
+            type: LoadBalancer
+            loadBalancerIP: 192.168.178.203
+          datasources:
+            datasources.yaml:
+              apiVersion: 1
+              datasources:
+                - name: VictoriaMetrics
+                  type: prometheus
+                  access: proxy
+                  url: http://vm-metrics.vm-operator.svc/select/0/prometheus
+                  isDefault: true
+
+
+    - name: Install Grafana via Helm
+      command: >
+        helm upgrade --install grafana grafana/grafana
+        -n monitoring
+        -f /tmp/grafana-values.yaml
+      changed_when: true
+
+    - name: Show Grafana access info
+      debug:
+        msg: |
+          📊 Grafana is deployed!
+          ➤ URL: http://grafana.lab.local
+          🔐 Login: admin / admin
