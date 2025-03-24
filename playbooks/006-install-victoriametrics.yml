@@ -216,24 +216,3 @@
         msg: |
           ➤ Visit: http://metrics.lab.local
 
-    - name: Create MetalLB IPAddressPool for metrics.lab.local
-      copy:
-        dest: /tmp/metallb-metrics-pool.yaml
-        content: |
-          apiVersion: metallb.io/v1beta1
-          kind: IPAddressPool
-          metadata:
-            name: metrics-pool
-            namespace: metallb-system
-          spec:
-            addresses:
-              - 192.168.178.202/32
-          ---
-          apiVersion: metallb.io/v1beta1
-          kind: L2Advertisement
-          metadata:
-            name: metrics-advertise
-            namespace: metallb-system
-
-    - name: Apply metrics IP pool to MetalLB
-      command: kubectl apply -f /tmp/metallb-metrics-pool.yaml
