@@ -28,6 +28,7 @@
       command: helm repo add jetstack https://charts.jetstack.io
       changed_when: true
 
+
     - name: Install cert-manager via Helm
       command: >
         helm upgrade --install cert-manager jetstack/cert-manager
@@ -41,7 +42,10 @@
         helm upgrade --install rancher rancher-latest/rancher
         --namespace cattle-system
         --set hostname={{ rancher_hostname }}
-        --set ingress.tls.source=auto
+        --set ingress.tls.source=letsEncrypt
+        --set ingress.ingressClassName=traefik
+        --set ingress.annotations."cert-manager\.io/issuer"=-
+        --set ingress.annotations."cert-manager\.io/issuer-kind"=-
         --set replicas=1
       changed_when: true
 

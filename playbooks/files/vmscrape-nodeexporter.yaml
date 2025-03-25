@@ -1,0 +1,17 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: node-exporter
+  namespace: vm-operator
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  namespaceSelector:
+    matchNames:
+      - vm-operator
+  endpoints:
+    - port: metrics
+      interval: 15s
+                

@@ -1,0 +1,15 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAgent
+metadata:
+  name: vmagent
+  namespace: vm-operator
+spec:
+  replicaCount: 1
+  selectAllByDefault: true
+  externalLabels:
+    cluster: lab
+  scrapeInterval: "15s"
+
+  remoteWrite:
+    - url: http://vminsert-vmcluster.vm-operator.svc.cluster.local:8480/insert/0/prometheus

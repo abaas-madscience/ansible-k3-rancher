@@ -1,0 +1,20 @@
+---
+- name: Install all ingress rules
+  hosts: control
+  become: false
+  tasks:
+
+    - name: Copy Loki values file to control node
+      copy:
+        src: ingress.yaml
+        dest: /tmp/ingress.yaml
+
+    - name: Apply all Ingresses
+      command: kubectl apply -f /tmp/ingress.yaml
+
+    - name: Show Grafana Loki config tip
+      debug:
+        msg: |
+          🔍 Loki is deployed.
+          ➤ In Grafana: Add Data Source > Loki
+          ➤ URL: http://loki.monitoring.svc.cluster.local:3100

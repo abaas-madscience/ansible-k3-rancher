@@ -31,52 +31,23 @@
           -n vm-operator --timeout=60s
       changed_when: false
 
-    - name: Apply minimal VMCluster
+    - name: Copy victoriametrics_cluster.yaml file over
       copy:
-        dest: /tmp/vmcluster.yaml
-        content: |
-          apiVersion: operator.victoriametrics.com/v1beta1
-          kind: VMCluster
-          metadata:
-            name: vmcluster
-            namespace: vm-operator
-          spec:
-            retentionPeriod: "1"
-            vmstorage:
-              replicaCount: 1
-            vminsert:
-              replicaCount: 1
-            vmselect:
-              replicaCount: 1
+        src: victoriametrics_cluster.yaml
+        dest: /tmp/victoriametrics_cluster.yaml
 
     - name: Apply VMCluster manifest
-      command: kubectl apply -f /tmp/vmcluster.yaml
+      command: kubectl apply -f /tmp/victoriametrics_cluster.yaml
 
-    - name: Apply VMAgent to scrape K8s nodes
+    - name: Copy victoriametrics_agent.yaml file over
       copy:
-        dest: /tmp/vmagent.yaml
-        content: |
-          apiVersion: operator.victoriametrics.com/v1beta1
-          kind: VMAgent
-          metadata:
-            name: vmagent
-            namespace: vm-operator
-          spec:
-            replicaCount: 1
-            selectAllByDefault: true
-            externalLabels:
-              cluster: lab
-            scrapeInterval: "15s"
-
-            remoteWrite:
-              - url: http://vminsert-vmcluster.vm-operator.svc.cluster.local:8480/insert/0/prometheus
-
-
+        src: victoriametrics_agent.yaml
+        dest: /tmp/victoriametrics_agent.yaml
 
     - name: Apply VMAgent manifest
-      command: kubectl apply -f /tmp/vmagent.yaml
+      command: kubectl apply -f /tmp/victoriametrics_agent.yaml
 
-    - name: Reserve MetalLB IP for metrics.lab.local
+    - name: Add VM Metrics to use Ingress
       copy:
         dest: /tmp/vm-metrics-lb.yaml
         content: |
@@ -86,125 +57,41 @@
             name: vm-metrics
             namespace: vm-operator
           spec:
-            type: LoadBalancer
-            loadBalancerIP: 192.168.178.202
+            type: ClusterIP
             ports:
               - name: http
                 port: 80
                 targetPort: 8481
             selector:
-                app.kubernetes.io/name: vmselect
+              app.kubernetes.io/name: vmselect
 
-    - name: Deploy node-exporter as DaemonSet
+    - name: Copy victoriametrics_agent.yaml file over
       copy:
+        src: node-exporter.yaml
         dest: /tmp/node-exporter.yaml
-        content: |
-          apiVersion: apps/v1
-          kind: DaemonSet
-          metadata:
-            name: node-exporter
-            namespace: vm-operator
-            labels:
-              app: node-exporter
-          spec:
-            selector:
-              matchLabels:
-                app: node-exporter
-            template:
-              metadata:
-                labels:
-                  app: node-exporter
-              spec:
-                containers:
-                  - name: node-exporter
-                    image: quay.io/prometheus/node-exporter:v1.8.1
-                    ports:
-                      - containerPort: 9100
-                        name: metrics
-                    resources:
-                      limits:
-                        cpu: 100m
-                        memory: 64Mi
-                      requests:
-                        cpu: 50m
-                        memory: 32Mi
-                    args:
-                      - '--path.rootfs=/host'
-                    volumeMounts:
-                      - name: proc
-                        mountPath: /host/proc
-                        readOnly: true
-                      - name: sys
-                        mountPath: /host/sys
-                        readOnly: true
-                      - name: root
-                        mountPath: /host
-                        readOnly: true
-                hostNetwork: true
-                hostPID: true
-                tolerations:
-                  - operator: Exists
-                volumes:
-                  - name: proc
-                    hostPath:
-                      path: /proc
-                  - name: sys
-                    hostPath:
-                      path: /sys
-                  - name: root
-                    hostPath:
-                      path: /
+
+    - name: Apply  service for metrics UI
+      command: kubectl apply -f /tmp/vm-metrics-lb.yaml
+
+
     - name: Apply node-exporter DaemonSet
       command: kubectl apply -f /tmp/node-exporter.yaml
 
-    - name: Create VMServiceScrape for node-exporter
+    - name: Copy vmscrape-nodeexporter.yaml file over
       copy:
+        src: vmscrape-nodeexporter.yaml
         dest: /tmp/vmscrape-nodeexporter.yaml
-        content: |
-          apiVersion: operator.victoriametrics.com/v1beta1
-          kind: VMServiceScrape
-          metadata:
-            name: node-exporter
-            namespace: vm-operator
-          spec:
-            selector:
-              matchLabels:
-                app: node-exporter
-            namespaceSelector:
-              matchNames:
-                - vm-operator
-            endpoints:
-              - port: metrics
-                interval: 15s
+
     - name: Apply VMServiceScrape for node-exporter
       command: kubectl apply -f /tmp/vmscrape-nodeexporter.yaml
 
-    - name: Apply LoadBalancer service for metrics UI
-      command: kubectl apply -f /tmp/vm-metrics-lb.yaml
-
-    - name: Create Service for node-exporter
+    - name: Copy vmscrape-nodeexporter.yaml file over
       copy:
+        src: node-exporter-svc.yaml
         dest: /tmp/node-exporter-svc.yaml
-        content: |
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: node-exporter
-            namespace: vm-operator
-            labels:
-              app: node-exporter
-          spec:
-            selector:
-              app: node-exporter
-            ports:
-              - name: metrics
-                port: 9100
-                targetPort: 9100
-            clusterIP: None
 
     - name: Apply Service for node-exporter
       command: kubectl apply -f /tmp/node-exporter-svc.yaml
-
 
     - name: Show VictoriaMetrics message
       debug:

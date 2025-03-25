@@ -1,0 +1,21 @@
+---
+adminUser: admin
+adminPassword: admin
+
+readinessProbe:
+  httpGet:
+    path: /api/health
+    port: 3000
+  initialDelaySeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        type: prometheus
+        access: proxy
+        url: http://vm-metrics.vm-operator.svc/select/0/prometheus
+        isDefault: true

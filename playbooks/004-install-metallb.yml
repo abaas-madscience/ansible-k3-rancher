@@ -4,36 +4,38 @@
   become: false
   vars:
     metallb_ip: 192.168.178.201
+
   tasks:
 
     - name: Check if Helm is installed
-      shell: which helm
+      command: which helm
       register: helm_installed
       ignore_errors: true
+      changed_when: false
 
-    - name: Install Helm binary
+    - name: Install Helm binary if missing
       become: true
       shell: |
         curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
       args:
         executable: /bin/bash
       when: helm_installed.rc != 0
-      register: helm_install
-      changed_when: true
 
-    - name: Create metallb namespace
-      command: kubectl create namespace metallb-system
-      register: ns_create
-      failed_when: false
-      changed_when: "'created' in ns_create.stdout"
+    - name: Ensure metallb-system namespace exists
+      shell: |
+        kubectl get namespace metallb-system || kubectl create namespace metallb-system
+      changed_when: "'created' in result.stdout"
+      register: result
+
 
     - name: Add Helm repo for MetalLB
       command: helm repo add metallb https://metallb.github.io/metallb
-      changed_when: true
+      args:
+        creates: ~/.cache/helm/repository/metallb-index.yaml
 
     - name: Update Helm repos
       command: helm repo update
-      changed_when: true
+      changed_when: false
 
     - name: Install or upgrade MetalLB
       command: >
@@ -42,27 +44,12 @@
       args:
         creates: /etc/rancher/k3s/metallb-installed-marker
 
-    - name: Create IP address pool + L2Advertisement for Rancher
+    - name: Copy MetalLB config YAML to control node
       copy:
+        src: metallb-rancher-pool.yaml
         dest: /tmp/metallb-rancher-pool.yaml
-        content: |
-          apiVersion: metallb.io/v1beta1
-          kind: IPAddressPool
-          metadata:
-            name: services-pool
-            namespace: metallb-system
-          spec:
-            addresses:
-              - 192.168.178.202-192.168.178.203       
-          ---
-          apiVersion: metallb.io/v1beta1
-          kind: L2Advertisement
-          metadata:
-            name: services-announce
-            namespace: metallb-system
 
-
-    - name: Wait for MetalLB webhook to be ready
+    - name: Wait for MetalLB controller to be ready
       shell: |
         kubectl wait --namespace metallb-system \
           --for=condition=Ready pod \
@@ -70,5 +57,13 @@
           --timeout=60s
       register: wait_result
 
-    - name: Apply MetalLB config
+    - name: Check if MetalLB IPAddressPool exists
+      shell: |
+        kubectl get ipaddresspool -n metallb-system services-pool --no-headers
+      register: ip_pool_check
+      failed_when: false
+      changed_when: false
+
+    - name: Apply MetalLB config if IPAddressPool doesn't exist
       command: kubectl apply -f /tmp/metallb-rancher-pool.yaml
+      when: ip_pool_check.rc != 0
